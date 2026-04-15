@@ -1,0 +1,83 @@
+name: Docs drift check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  openapi-drift:
+    name: OpenAPI spec in sync with controllers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run docs drift check
+        run: bash scripts/check-docs-sync.sh
+
+  docs-reminder:
+    name: Remind to update docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect source vs docs changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            source:
+              - 'src/controllers/**'
+              - 'prisma/schema.prisma'
+              - 'src/services/**'
+              - 'src/providers/**'
+              - 'src/middleware/auth.ts'
+              - 'src/middleware/tsoa-auth.ts'
+            docs:
+              - 'web/src/app/docs/**'
+              - 'README.md'
+              - 'CLAUDE.md'
+
+      - name: Post sticky reminder comment
+        if: steps.filter.outputs.source == 'true' && steps.filter.outputs.docs != 'true'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: docs-reminder
+          message: |
+            ### 📘 Docs likely need an update
+
+            This PR touches source paths that have matching documentation
+            invariants, but no file under `web/src/app/docs/**`, `README.md`,
+            or `CLAUDE.md` was changed.
+
+            Please check the *Documentation invariants* table in
+            [`CLAUDE.md`](../blob/main/CLAUDE.md) and update the relevant
+            doc page(s) in this PR:
+
+            - New/changed endpoint → `web/src/app/docs/api-reference/page.tsx`
+            - Schema change → `web/src/app/docs/concepts/page.tsx`
+            - New task status / escrow state → `web/src/app/docs/concepts/page.tsx`
+            - Auth error shape / scope change → `web/src/app/docs/build-an-agent/page.tsx`
+
+            If docs don't apply, reply with a one-line rationale and this
+            comment will be dismissed on re-run.
+
+      - name: Clear sticky comment when docs are updated
+        if: steps.filter.outputs.source == 'true' && steps.filter.outputs.docs == 'true'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: docs-reminder
+          delete: true
