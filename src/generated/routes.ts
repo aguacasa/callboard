@@ -215,7 +215,7 @@ const models: TsoaRoute.Models = {
         "properties": {
             "name": {"dataType":"string","required":true},
             "description": {"dataType":"string"},
-            "ownerId": {"dataType":"string","required":true},
+            "ownerId": {"dataType":"string"},
             "endpointUrl": {"dataType":"string","required":true},
             "capabilities": {"dataType":"array","array":{"dataType":"string"},"required":true},
             "pricingModel": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["PER_CALL"]},{"dataType":"enum","enums":["PER_TASK"]},{"dataType":"enum","enums":["SUBSCRIPTION"]},{"dataType":"enum","enums":["CUSTOM"]}]},

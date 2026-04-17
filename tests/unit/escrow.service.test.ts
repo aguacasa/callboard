@@ -61,7 +61,7 @@ describe("EscrowService", () => {
     it("throws 404 when no HELD transaction found", async () => {
       prismaMock.transaction.findFirst.mockResolvedValue(null);
 
-      await expect(service.releaseFunds("task-1")).rejects.toThrow("No held escrow found");
+      await expect(service.releaseFunds("task-1")).rejects.toThrow("No active escrow found");
     });
 
     it("throws 502 when provider fails to release", async () => {
@@ -84,7 +84,7 @@ describe("EscrowService", () => {
 
     it("throws when no HELD transaction found", async () => {
       prismaMock.transaction.findFirst.mockResolvedValue(null);
-      await expect(service.refundFunds("task-1")).rejects.toThrow("No held escrow found");
+      await expect(service.refundFunds("task-1")).rejects.toThrow("No active escrow found");
     });
   });
 
@@ -100,7 +100,7 @@ describe("EscrowService", () => {
 
     it("throws when no HELD transaction found", async () => {
       prismaMock.transaction.findFirst.mockResolvedValue(null);
-      await expect(service.freezeFunds("task-1", "reason")).rejects.toThrow("No held escrow found");
+      await expect(service.freezeFunds("task-1", "reason")).rejects.toThrow("No active escrow found");
     });
   });
 });
