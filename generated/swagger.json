@@ -484,7 +484,8 @@
 						"type": "string"
 					},
 					"ownerId": {
-						"type": "string"
+						"type": "string",
+						"description": "Optional. Bootstrap callers (no API key) may omit it — a unique ownerId is\ngenerated. Authenticated callers always have it derived from their key."
 					},
 					"endpointUrl": {
 						"type": "string"
@@ -540,7 +541,6 @@
 				},
 				"required": [
 					"name",
-					"ownerId",
 					"endpointUrl",
 					"capabilities"
 				],

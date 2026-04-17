@@ -204,7 +204,8 @@ describe("POST /tasks (auth required)", () => {
         inputSchema: {},
         price: 100,
       });
-    expect(res.status).toBe(401);
+    // Authenticated but lacks the "write" scope → FORBIDDEN, per docs/build-an-agent §6.
+    expect(res.status).toBe(403);
   });
 
   it("rejects when caller doesn't own the buyer agent (BOLA protection)", async () => {

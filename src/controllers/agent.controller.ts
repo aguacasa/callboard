@@ -48,7 +48,11 @@ interface AgentResponse {
 interface CreateAgentBody {
   name: string;
   description?: string;
-  ownerId: string;
+  /**
+   * Optional. Bootstrap callers (no API key) may omit it — a unique ownerId is
+   * generated. Authenticated callers always have it derived from their key.
+   */
+  ownerId?: string;
   endpointUrl: string;
   capabilities: string[];
   pricingModel?: "PER_CALL" | "PER_TASK" | "SUBSCRIPTION" | "CUSTOM";

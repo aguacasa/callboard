@@ -1,7 +1,13 @@
 import prisma from "../utils/prisma";
 import { getPaymentProvider } from "../providers/payment";
-import { Transaction, PaymentMethod } from "../types/domain";
+import { EscrowStatus, PaymentMethod, Transaction } from "../types/domain";
 import { AppError } from "../utils/errors";
+
+// freezeFunds is the dispute entry — only HELD escrows can be disputed.
+// release/refund are also called from the dispute → resolve path, so they
+// additionally accept DISPUTED.
+const HELD: EscrowStatus[] = ["HELD"];
+const HELD_OR_DISPUTED: EscrowStatus[] = ["HELD", "DISPUTED"];
 
 export class EscrowService {
   /**
@@ -32,7 +38,7 @@ export class EscrowService {
    * Release escrowed funds to the seller on task completion.
    */
   async releaseFunds(taskContractId: string): Promise<Transaction> {
-    const tx = await this.getHeldTransaction(taskContractId);
+    const tx = await this.findActive(taskContractId, HELD_OR_DISPUTED);
     const provider = getPaymentProvider();
 
     const result = await provider.releaseEscrow(tx.externalRef!);
@@ -53,7 +59,7 @@ export class EscrowService {
    * Refund escrowed funds to the buyer on task failure/cancellation.
    */
   async refundFunds(taskContractId: string): Promise<Transaction> {
-    const tx = await this.getHeldTransaction(taskContractId);
+    const tx = await this.findActive(taskContractId, HELD_OR_DISPUTED);
     const provider = getPaymentProvider();
 
     const result = await provider.refundEscrow(tx.externalRef!);
@@ -74,7 +80,7 @@ export class EscrowService {
    * Freeze funds during a dispute.
    */
   async freezeFunds(taskContractId: string, reason: string): Promise<Transaction> {
-    const tx = await this.getHeldTransaction(taskContractId);
+    const tx = await this.findActive(taskContractId, HELD);
 
     return prisma.transaction.update({
       where: { id: tx.id },
@@ -92,16 +98,16 @@ export class EscrowService {
     });
   }
 
-  private async getHeldTransaction(taskContractId: string): Promise<Transaction> {
+  private async findActive(
+    taskContractId: string,
+    allowedStatuses: EscrowStatus[]
+  ): Promise<Transaction> {
     const tx = await prisma.transaction.findFirst({
-      where: {
-        taskContractId,
-        escrowStatus: "HELD",
-      },
+      where: { taskContractId, escrowStatus: { in: allowedStatuses } },
     });
 
     if (!tx) {
-      throw new AppError(404, `No held escrow found for task contract: ${taskContractId}`);
+      throw new AppError(404, `No active escrow found for task contract: ${taskContractId}`);
     }
 
     return tx;

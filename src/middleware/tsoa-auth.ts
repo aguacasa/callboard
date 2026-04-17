@@ -1,6 +1,7 @@
 import { Request } from "express";
 import { hashApiKey } from "../utils/hash";
 import { AuthenticatedRequest } from "./auth";
+import { ForbiddenError, UnauthorizedError } from "../utils/errors";
 import prisma from "../utils/prisma";
 
 export async function expressAuthentication(
@@ -10,23 +11,21 @@ export async function expressAuthentication(
 ): Promise<any> {
   if (securityName === "api_key") {
     const key = request.header("X-API-Key");
-    if (!key) throw new Error("Missing X-API-Key header");
+    if (!key) throw new UnauthorizedError("Missing X-API-Key header");
 
     const keyHash = hashApiKey(key);
     const apiKey = await prisma.apiKey.findUnique({ where: { keyHash } });
 
-    if (!apiKey || apiKey.revoked) throw new Error("Invalid or revoked API key");
-    if (apiKey.expiresAt && apiKey.expiresAt < new Date()) throw new Error("Expired API key");
+    if (!apiKey || apiKey.revoked) throw new UnauthorizedError("Invalid or revoked API key");
+    if (apiKey.expiresAt && apiKey.expiresAt < new Date()) throw new UnauthorizedError("Expired API key");
 
-    // Enforce scopes
     if (scopes && scopes.length > 0) {
       const missingScopes = scopes.filter((s) => !apiKey.scopes.includes(s));
       if (missingScopes.length > 0) {
-        throw new Error(`Insufficient permissions. Missing scopes: ${missingScopes.join(", ")}`);
+        throw new ForbiddenError(`Insufficient permissions. Missing scopes: ${missingScopes.join(", ")}`);
       }
     }
 
-    // Attach to request for controllers
     (request as AuthenticatedRequest).apiKey = {
       id: apiKey.id,
       ownerId: apiKey.ownerId,
@@ -37,5 +36,5 @@ export async function expressAuthentication(
     return apiKey;
   }
 
-  throw new Error(`Unsupported security: ${securityName}`);
+  throw new UnauthorizedError(`Unsupported security: ${securityName}`);
 }
