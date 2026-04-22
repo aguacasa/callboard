@@ -5,10 +5,15 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import RedisStore from "rate-limit-redis";
+import Redis from "ioredis";
 import swaggerUi from "swagger-ui-express";
 import { RegisterRoutes } from "./generated/routes";
 import { errorHandler } from "./middleware/errorHandler";
 import { startExpireStaleTasksJob } from "./jobs/expireStaleTasks";
+import { validateProdEnv } from "./config/env";
+
+validateProdEnv();
 
 const app = express();
 
@@ -29,26 +34,43 @@ app.use(cors({
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 100,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  message: { error: { code: "RATE_LIMITED", message: "Too many requests, please try again later" } },
-});
+// Rate limiter store: Redis when available (survives deploys, shared across
+// replicas), in-memory fallback for local dev + tests.
+let redisClient: Redis | null = null;
+if (process.env.REDIS_URL && process.env.NODE_ENV !== "test") {
+  redisClient = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: 3,
+    enableOfflineQueue: false,
+    lazyConnect: true,
+  });
+  redisClient.on("error", (err) => {
+    console.error("[redis] rate limiter connection error:", err.message);
+  });
+}
+
+function makeLimiter(key: string, windowMs: number, limit: number, message: string) {
+  return rateLimit({
+    windowMs,
+    limit,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: { error: { code: "RATE_LIMITED", message } },
+    ...(redisClient && {
+      store: new RedisStore({
+        sendCommand: (command: string, ...args: string[]) =>
+          redisClient!.call(command, ...args) as Promise<any>,
+        prefix: `rl:${key}:`,
+      }),
+    }),
+  });
+}
+
+const apiLimiter = makeLimiter("api", 15 * 60 * 1000, 100, "Too many requests, please try again later");
 app.use("/agents", apiLimiter);
 app.use("/tasks", apiLimiter);
 app.use("/api-keys", apiLimiter);
 
-// Tighter rate limit for the public waitlist endpoint (no auth).
-const waitlistLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  limit: 5,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  message: { error: { code: "RATE_LIMITED", message: "Too many waitlist submissions, please try again later" } },
-});
+const waitlistLimiter = makeLimiter("waitlist", 60 * 60 * 1000, 5, "Too many waitlist submissions, please try again later");
 app.use("/waitlist", waitlistLimiter);
 
 // Health check
@@ -86,7 +108,11 @@ if (process.env.NODE_ENV !== "test") {
   │                                         │
   └─────────────────────────────────────────┘
     `);
-    startExpireStaleTasksJob();
+    if (process.env.WORKER_DISABLED === "true") {
+      console.log("[server] inline background worker disabled — run `npm run start:worker` separately");
+    } else {
+      startExpireStaleTasksJob();
+    }
   });
 }
 
