@@ -1,0 +1,63 @@
+# Local mirror of the production stack — useful for testing Dockerfiles,
+# the migration entrypoint, and prod env-var behavior before pushing.
+#
+# Coolify does NOT use this file; it builds the Dockerfiles directly.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up --build
+#   open http://localhost:3001
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: localdev
+      POSTGRES_DB: callboard
+    volumes:
+      - pgdata-prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:localdev@postgres:5432/callboard
+      REDIS_URL: redis://redis:6379
+      # A real 64-char random value — just not the literal default. Never use this in prod.
+      API_KEY_SALT: local-prod-test-salt-not-for-production-use-ever-xxxxxxxxxxxxxxxxxx
+      CORS_ORIGINS: http://localhost:3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "3000:3000"
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3000
+    environment:
+      NODE_ENV: production
+    ports:
+      - "3001:3001"
+    depends_on:
+      - api
+
+volumes:
+  pgdata-prod:

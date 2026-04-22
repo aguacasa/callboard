@@ -1,0 +1,38 @@
+# Anything not needed inside the API build context.
+# Smaller context = faster uploads to the Docker daemon and better cache hits.
+
+node_modules
+dist
+.next
+
+# Sibling packages — built in their own contexts.
+web
+mcp
+
+# Generated prisma client — rebuilt inside the image.
+src/generated/prisma
+
+# Git + CI metadata
+.git
+.github
+.gitignore
+
+# Env files — never bake secrets into an image. Coolify injects at runtime.
+.env
+.env.*
+!.env.example
+
+# Local tooling
+tests
+coverage
+*.log
+.DS_Store
+.vscode
+.idea
+
+# Docs / architecture — not needed at runtime
+Architecture
+README.md
+docker-compose*.yml
+Dockerfile
+scripts
